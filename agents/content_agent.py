@@ -48,12 +48,15 @@ class ContentAgent:
 
     def process_message(self, user_message: A2AMessage) -> A2AMessage:
         """The main entry point for our agent's logic."""
+        print(f"DEBUG: Received user message parts: {user_message.parts}")
         
         # 1. Extract the topic from the user's message
         # The A2A protocol puts the user's text in the 'parts' list
         if not user_message.parts or not user_message.parts[0].text:
             raise ValueError("User message is empty or has no text part.")
         topic = user_message.parts[0].text.strip()
+
+        print(f"DEBUG: Extracted topic: '{topic}'")
 
         # 2. Fetch news
         article, error = self.fetch_latest_news(topic)
