@@ -13,7 +13,7 @@ class ContentAgent:
             raise ValueError("API keys for GNews and Gemini must be set.")
         
         genai.configure(api_key=self.gemini_api_key)
-        self.model = genai.GenerativeModel('gemini-1.5-flash')
+        self.model = genai.GenerativeModel('gemini-2.5-flash')
 
     # NEW FUNCTION: The first AI step to clean up the user's input
     def extract_topic_with_ai(self, raw_text: str):
