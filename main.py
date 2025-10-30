@@ -25,6 +25,7 @@ app = FastAPI(
 )
 
 # This is our main endpoint that Telex will call
+@app.post("/agent/")
 @app.post("/agent")
 async def a2a_endpoint(request: Request):
     """Main A2A endpoint for our content agent."""
