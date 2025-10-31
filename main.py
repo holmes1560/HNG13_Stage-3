@@ -1,6 +1,4 @@
 # main.py
-# This is our main server file, built with FastAPI as per the guide.
-
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
@@ -46,7 +44,6 @@ async def a2a_endpoint(request: Request):
             id=rpc_request.id,
             result=agent_response_message
         )
-        # .model_dump() is the Pydantic way of converting the object to a dictionary
         return response.model_dump()
 
     except Exception as e:

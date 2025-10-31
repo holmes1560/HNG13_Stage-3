@@ -1,6 +1,4 @@
 # models/a2a.py
-# This file defines the exact structure of the A2A JSON-RPC messages.
-# We are copying the relevant parts from the blog post guide.
 
 from pydantic import BaseModel, Field
 from typing import Literal, Optional, List, Dict, Any
@@ -27,8 +25,6 @@ class JSONRPCRequest(BaseModel):
     method: Literal["message/send", "execute"]
     params: MessageParams
 
-# We will simplify the response for our agent. 
-# We just need to send a simple text message back.
 class JSONRPCResponse(BaseModel):
     jsonrpc: Literal["2.0"] = "2.0"
     id: str

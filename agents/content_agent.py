@@ -18,7 +18,7 @@ class ContentAgent:
     def extract_topic_with_ai(self, raw_text: str):
         """Uses Gemini to extract a clean, simple search topic from raw text."""
         
-        # --- THIS IS THE UPDATED PROMPT ---
+        
         prompt = f"""
         Analyze the following user text and extract only the main subject, entity, or topic.
         Your job is to return a 1-3 word keyword phrase suitable for a news API search.
@@ -50,7 +50,7 @@ class ContentAgent:
             return None, f"Failed to extract topic with AI: {e}"
 
     def fetch_latest_news(self, topic: str):
-        # We'll add quotes around the topic for a more precise search
+        
         url = f"https://gnews.io/api/v4/search?q=\"{topic}\"&lang=en&max=1&token={self.gnews_api_key}"
         try:
             response = requests.get(url, timeout=10)
