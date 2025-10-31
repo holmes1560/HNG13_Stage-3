@@ -2,8 +2,9 @@
 
 import os
 import requests
+from uuid import uuid4
 import google.generativeai as genai
-from models.a2a import A2AMessage, MessagePart
+from models.a2a import A2AMessage, MessagePart, TaskResult, TaskStatus, Artifact
 
 class ContentAgent:
     def __init__(self):
@@ -11,46 +12,26 @@ class ContentAgent:
         self.gemini_api_key = os.getenv('GEMINI_API_KEY')
         if not self.gnews_api_key or not self.gemini_api_key:
             raise ValueError("API keys for GNews and Gemini must be set.")
-        
         genai.configure(api_key=self.gemini_api_key)
-        self.model = genai.GenerativeModel('gemini-2.5-flash')
+        self.model = genai.GenerativeModel('gemini-2.5-flash') 
 
     def extract_topic_with_ai(self, raw_text: str):
-        """Uses Gemini to extract a clean, simple search topic from raw text."""
-        
-        
         prompt = f"""
         Analyze the following user text and extract only the main subject, entity, or topic.
         Your job is to return a 1-3 word keyword phrase suitable for a news API search.
         Do NOT add extra words like 'news', 'updates', 'stock', or 'information'.
-
-        Example 1:
-        User Text: "nvidia nvidia nvidia give me content ideas on nvidia"
-        Search Topic: "Nvidia"
-
-        Example 2:
-        User Text: "tell me what apple is doing with the iphone 17"
-        Search Topic: "iPhone 17"
-        
-        Example 3:
-        User Text: "I want content ideas about breakthroughs in AI"
-        Search Topic: "AI breakthroughs"
-
+        Example 1: User Text: "nvidia nvidia nvidia" -> Search Topic: "Nvidia"
+        Example 2: User Text: "tell me what apple is doing with the iphone 17" -> Search Topic: "iPhone 17"
         User Text: "{raw_text}"
-        
         Search Topic:
         """
-        # ------------------------------------
-        
         try:
             response = self.model.generate_content(prompt)
-            clean_topic = response.text.strip().replace("*", "").replace("\"", "")
-            return clean_topic, None
+            return response.text.strip().replace("*", "").replace("\"", ""), None
         except Exception as e:
             return None, f"Failed to extract topic with AI: {e}"
 
     def fetch_latest_news(self, topic: str):
-        
         url = f"https://gnews.io/api/v4/search?q=\"{topic}\"&lang=en&max=1&token={self.gnews_api_key}"
         try:
             response = requests.get(url, timeout=10)
@@ -66,7 +47,7 @@ class ContentAgent:
         headline = article['title']
         source = article['source']['name']
         prompt = f"""
-        As a creative strategist, generate a single, compelling content idea (e.g., a YouTube video title and description, or a blog post title).
+        As a creative strategist, generate a single, compelling content idea (e.g., a YouTube video title and description).
         The user's topic is: "{topic}"
         A relevant news headline is: "{headline}" (Source: {source})
         Provide a unique, actionable angle.
@@ -77,32 +58,39 @@ class ContentAgent:
         except Exception as e:
             return None, f"Failed to generate content with AI model: {e}"
 
-    def process_message(self, user_message: A2AMessage) -> A2AMessage:
-        """The main entry point for our agent's logic."""
+    def process_message(self, user_message: A2AMessage, task_id: str = None, context_id: str = None) -> TaskResult:
+        task_id = task_id or str(uuid4())
+        context_id = context_id or str(uuid4())
         
-        if not user_message.parts or not user_message.parts[0].text:
-            raise ValueError("User message is empty or has no text part.")
-        
-        raw_user_text = user_message.parts[0].text.strip()
-        print(f"DEBUG: Received raw text from Telex: '{raw_user_text}'")
+        try:
+            raw_user_text = user_message.parts[0].text.strip()
+            clean_topic, error = self.extract_topic_with_ai(raw_user_text)
+            if error: raise Exception(error)
+            
+            article, error = self.fetch_latest_news(clean_topic)
+            if error: raise Exception(error)
+            
+            content_idea, error = self.generate_content_idea(clean_topic, article)
+            if error: raise Exception(error)
+            
+            # --- Build the A2A Compliant Response ---
+            response_text = f"Content Idea:\n{content_idea.strip()}\n\nBased on the headline: '{article['title']}'"
+            agent_response_message = A2AMessage(role="agent", parts=[MessagePart(kind="text", text=response_text)], taskId=task_id)
 
-        clean_topic, error = self.extract_topic_with_ai(raw_user_text)
-        if error:
-            return A2AMessage(role="agent", parts=[MessagePart(kind="text", text=error)])
-        
-        print(f"DEBUG: AI extracted clean topic: '{clean_topic}'")
-
-        article, error = self.fetch_latest_news(clean_topic)
-        if error:
-            return A2AMessage(role="agent", parts=[MessagePart(kind="text", text=error)])
-
-        content_idea, error = self.generate_content_idea(clean_topic, article)
-        if error:
-            return A2AMessage(role="agent", parts=[MessagePart(kind="text", text=error)])
-
-        response_text = f"Content Idea:\n{content_idea.strip()}\n\nBased on the headline: '{article['title']}'"
-        agent_response = A2AMessage(
-            role="agent",
-            parts=[MessagePart(kind="text", text=response_text)]
-        )
-        return agent_response
+            return TaskResult(
+                id=task_id,
+                contextId=context_id,
+                status=TaskStatus(state="completed", message=agent_response_message),
+                artifacts=[
+                    Artifact(name="content_idea", parts=[MessagePart(kind="text", text=response_text)])
+                ],
+                history=[user_message, agent_response_message],
+            )
+        except Exception as e:
+            error_message = A2AMessage(role="agent", parts=[MessagePart(kind="text", text=str(e))], taskId=task_id)
+            return TaskResult(
+                id=task_id,
+                contextId=context_id,
+                status=TaskStatus(state="failed", message=error_message),
+                history=[user_message, error_message]
+            )
